@@ -51,9 +51,7 @@ groups:
       - alert: OpenTelemetryCollectorExportFailures
         expr: |
           sum by (service_instance_id, exporter) (
-            rate(otelcol_exporter_send_failed_spans[5m])
-            + rate(otelcol_exporter_send_failed_metric_points[5m])
-            + rate(otelcol_exporter_send_failed_log_records[5m])
+            rate({__name__=~"otelcol_exporter_send_failed_(spans|metric_points|log_records)"}[5m])
           ) > 0
         for: 5m
         labels:
