@@ -1,0 +1,53 @@
+name: Validate observability configuration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: observability-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Parse YAML files
+        run: |
+          python -m pip install --quiet PyYAML
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          files = sorted(
+              path for path in Path(".").rglob("*.yaml")
+              if ".github" not in path.parts
+          )
+          for path in files:
+              with path.open(encoding="utf-8") as handle:
+                  list(yaml.safe_load_all(handle))
+              print(f"validated {path}")
+          PY
+
+      - name: Validate Prometheus rules
+        run: >-
+          docker run --rm
+          --entrypoint=/bin/promtool
+          -v "$PWD:/work"
+          prom/prometheus:v3.11.3
+          check rules
+          /work/prometheus/recording-rules.yaml
+          /work/prometheus/alert-rules.yaml
