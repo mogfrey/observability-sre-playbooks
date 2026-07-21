@@ -1,0 +1,47 @@
+apiVersion: openslo/v1
+kind: Service
+metadata:
+  name: portfolio-api
+  displayName: Portfolio API
+spec:
+  description: Synthetic customer-facing API used to demonstrate SLO-as-code.
+---
+apiVersion: openslo/v1
+kind: SLO
+metadata:
+  name: portfolio-api-availability
+  displayName: Portfolio API availability
+  labels:
+    owner: platform-demo
+    tier: critical
+spec:
+  description: At least 99.9% of eligible API requests should avoid server-side failures over a rolling 30-day window.
+  service: portfolio-api
+  budgetingMethod: Occurrences
+  indicator:
+    metadata:
+      name: successful-request-ratio
+      displayName: Successful request ratio
+    spec:
+      ratioMetric:
+        counter: true
+        good:
+          metricSource:
+            metricSourceRef: prometheus
+            type: prometheus
+            spec:
+              promql: >-
+                sum(rate(http_server_request_duration_seconds_count{service_name="portfolio-api",http_response_status_code!~"5.."}[5m]))
+        total:
+          metricSource:
+            metricSourceRef: prometheus
+            type: prometheus
+            spec:
+              promql: >-
+                sum(rate(http_server_request_duration_seconds_count{service_name="portfolio-api"}[5m]))
+  objectives:
+    - displayName: Monthly availability
+      target: 0.999
+      timeWindow:
+        - duration: 30d
+          isRolling: true
