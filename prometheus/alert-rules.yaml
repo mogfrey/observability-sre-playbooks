@@ -1,0 +1,77 @@
+groups:
+  - name: service-slo-alerts
+    rules:
+      - alert: ServiceAvailabilityFastBurn
+        expr: |
+          service:http_requests:error_ratio5m > (14.4 * 0.001)
+          and on (service_namespace, service_name)
+          service:http_requests:error_ratio1h > (14.4 * 0.001)
+          and on (service_namespace, service_name)
+          service:http_requests:rate5m > 0.1
+        for: 2m
+        labels:
+          severity: page
+          slo: availability
+        annotations:
+          summary: "{{ $labels.service_namespace }}/{{ $labels.service_name }} is rapidly consuming its availability error budget"
+          description: "The 5-minute and 1-hour error ratios exceed the 14.4x burn-rate threshold for a 99.9% SLO."
+          runbook_url: "https://github.com/mogfrey/observability-sre-playbooks/blob/main/runbooks/high-error-rate.md"
+
+      - alert: ServiceAvailabilitySlowBurn
+        expr: |
+          service:http_requests:error_ratio1h > (6 * 0.001)
+          and on (service_namespace, service_name)
+          service:http_requests:error_ratio6h > (6 * 0.001)
+          and on (service_namespace, service_name)
+          service:http_requests:rate5m > 0.1
+        for: 15m
+        labels:
+          severity: ticket
+          slo: availability
+        annotations:
+          summary: "{{ $labels.service_namespace }}/{{ $labels.service_name }} is persistently consuming its availability error budget"
+          description: "The 1-hour and 6-hour error ratios exceed the 6x burn-rate threshold for a 99.9% SLO."
+          runbook_url: "https://github.com/mogfrey/observability-sre-playbooks/blob/main/runbooks/high-error-rate.md"
+
+      - alert: ServiceLatencyP95High
+        expr: |
+          service:http_requests:latency_p95_5m > 1
+          and on (service_namespace, service_name)
+          service:http_requests:rate5m > 0.1
+        for: 10m
+        labels:
+          severity: ticket
+          slo: latency
+        annotations:
+          summary: "{{ $labels.service_namespace }}/{{ $labels.service_name }} p95 latency exceeds one second"
+          description: "Confirm that this static threshold matches the service's approved latency SLO before enabling the alert."
+
+  - name: telemetry-pipeline-alerts
+    rules:
+      - alert: OpenTelemetryCollectorExportFailures
+        expr: |
+          sum by (service_instance_id, exporter) (
+            rate(otelcol_exporter_send_failed_spans[5m])
+            + rate(otelcol_exporter_send_failed_metric_points[5m])
+            + rate(otelcol_exporter_send_failed_log_records[5m])
+          ) > 0
+        for: 5m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OpenTelemetry Collector is failing to export telemetry"
+          description: "Inspect exporter reachability, authentication, queue growth and backend health before restarting the Collector."
+
+      - alert: OpenTelemetryCollectorQueueNearCapacity
+        expr: |
+          max by (service_instance_id, exporter) (
+            otelcol_exporter_queue_size
+            /
+            clamp_min(otelcol_exporter_queue_capacity, 1)
+          ) > 0.8
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "OpenTelemetry Collector export queue is above 80% capacity"
+          description: "The backend or network path may be slower than incoming telemetry volume."
