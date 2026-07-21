@@ -1,0 +1,60 @@
+groups:
+  - name: service-request-recordings
+    interval: 30s
+    rules:
+      - record: service:http_requests:rate5m
+        expr: |
+          sum by (service_namespace, service_name) (
+            rate(http_server_request_duration_seconds_count[5m])
+          )
+
+      - record: service:http_requests:error_ratio5m
+        expr: |
+          sum by (service_namespace, service_name) (
+            rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m])
+          )
+          /
+          clamp_min(
+            sum by (service_namespace, service_name) (
+              rate(http_server_request_duration_seconds_count[5m])
+            ),
+            0.000000001
+          )
+
+      - record: service:http_requests:error_ratio1h
+        expr: |
+          sum by (service_namespace, service_name) (
+            rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[1h])
+          )
+          /
+          clamp_min(
+            sum by (service_namespace, service_name) (
+              rate(http_server_request_duration_seconds_count[1h])
+            ),
+            0.000000001
+          )
+
+      - record: service:http_requests:error_ratio6h
+        expr: |
+          sum by (service_namespace, service_name) (
+            rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[6h])
+          )
+          /
+          clamp_min(
+            sum by (service_namespace, service_name) (
+              rate(http_server_request_duration_seconds_count[6h])
+            ),
+            0.000000001
+          )
+
+      - record: service:http_requests:availability5m
+        expr: 1 - service:http_requests:error_ratio5m
+
+      - record: service:http_requests:latency_p95_5m
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le, service_namespace, service_name) (
+              rate(http_server_request_duration_seconds_bucket[5m])
+            )
+          )
